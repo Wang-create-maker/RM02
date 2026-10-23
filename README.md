@@ -10,6 +10,8 @@
 
 
 
+
+
 2. 逐帧处理（while(cap.read(frame))）
 每帧依次执行以下步骤：
 
@@ -39,6 +41,9 @@ findContours 取外轮廓（RETR_EXTERNAL）+ CHAIN_APPROX_SIMPLE
 
 
 
+
+
+
 3. 轮廓筛选与灯条建模
 对每个轮廓：
 
@@ -65,6 +70,9 @@ bottom = (pts[2]+pts[3])/2（下两点中点）
 
 
 
+
+
+
 4. 可视化
 用 draw_order = {0,1,3,2} 连接四点画绿色矩形（避免交叉连线）
 
@@ -73,3 +81,6 @@ bottom = (pts[2]+pts[3])/2（下两点中点）
 imshow 显示 Result（原图）与 Result2（标注图）
 
 waitKey 兼具帧间延时与 ESC 退出判断
+
+
+项目完成了任务1、2。任务3目前能够获得每根灯条的端点坐标，还不能将它们连成矩形
