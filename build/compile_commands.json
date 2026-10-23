@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/home/wangyz/RM/build",
+  "command": "/usr/bin/g++  -isystem /usr/local/opencv4.5.4/include/opencv4 -g -std=c++14 -o CMakeFiles/rm_lightbar_detection.dir/src/main.cpp.o -c /home/wangyz/RM/src/main.cpp",
+  "file": "/home/wangyz/RM/src/main.cpp",
+  "output": "CMakeFiles/rm_lightbar_detection.dir/src/main.cpp.o"
+}
+]
