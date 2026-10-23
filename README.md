@@ -59,6 +59,7 @@ area > 20 && h > 10（剔除噪点）
 top = (pts[0]+pts[1])/2（上两点中点）
 
 bottom = (pts[2]+pts[3])/2（下两点中点）
+之后利用四个中点连线成框
 
 保存 rect 与 top/bottom，push_back 到 bars
 
