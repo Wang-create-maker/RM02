@@ -47,11 +47,10 @@ int main(int argc,char** argv){
         cv::imshow("Morphology_Mask", mask);
         
         //————————————寻找轮廓————————
-        std::vector<std::vector<cv::Point>> contours;//定义一个二维数组，存放轮廓像素点
+        std::vector<std::vector<cv::Point>> contours;//定义一个二维数组类型的容器（contours），存放轮廓像素点
         cv::findContours(mask, contours/*输出形式*/, cv::RETR_EXTERNAL/*只要外轮廓*/, cv::CHAIN_APPROX_SIMPLE/*只要外轮廓四个点*/);
-        cv::Mat result = frame.clone(); // 用于画图展示//保护frame数据，用于对比
-        
-        
+        cv::Mat result = frame.clone();              // 用于画图展示//保护frame数据，用于对比展示效果
+
         
         struct LightBar{
             cv::Point2f top;      // 灯条顶部的中心点
@@ -71,27 +70,26 @@ int main(int argc,char** argv){
             }
             double area = cv::contourArea(contours[i]);
             float rect_w = rotRect.size.width;
-            float rect_h = rotRect.size.height;
+            float rect_h = rotRect.size.height;//？？？？？？为什么是浮点型？？？？？？
             
             if (rect_w > rect_h) {
-                std::swap(rect_w, rect_h); 
+                std::swap(rect_w, rect_h);    //长宽转换，始终保持长的边是h，短的是w
             }
 
-            int w = static_cast<int>(rect_w);
+            int w = static_cast<int>(rect_w); //float ==> int 进行大小比较
             int h = static_cast<int>(rect_h);
-            
             if (h < max_h * 0.4) continue;    
-            if(area < 20 || h < 10) continue; 
+            if(area < 20 || h < 10) continue; //筛掉干扰信息
             
             std::cout << "轮廓 " << i << " - 宽: " << w << ", 高(长度): " << h << ", 面积: " << area << std::endl;
             
             // 4. 绘制旋转矩形（提取4个顶点画线）
-            cv::Point2f pts[4];//创建了一个装“点”的空盒子
-            rotRect.points(pts);//根据旋转矩形的角度，宽高，计算四点坐标存入上述空盒子
+            cv::Point2f pts[4];  //创建了一个装“点”的空盒子
+            rotRect.points(pts); //根据旋转矩形的角度，宽高，计算四点坐标存入上述空盒子
             std::sort(pts,pts+4,[](const cv::Point2f& a,const cv::Point2f& b){return a.y < b.y ||(a.x < b.x && a.y == b.y);});
             
                     
-            LightBar lb;
+            LightBar lb;         //“LightBar”类型的结构体 lb 充当送货员，将一根灯条上下端点的坐标存放到bars中
             lb.rect = rotRect;
             lb.top = (pts[0] + pts[1]) * 0.5f;
             lb.bottom = (pts[2] + pts[3]) * 0.5f;                          
@@ -99,12 +97,6 @@ int main(int argc,char** argv){
             bars.push_back(lb);
             
             
-            //根据点坐标连线
-            int draw_order[4] = {0, 1, 3, 2}; 
-            for (int j = 0; j < 4; j++) {
-                cv::line(result, pts[draw_order[j]], pts[draw_order[(j + 1) % 4]], cv::Scalar(0, 255, 0), 1);
-            }
-
             //借助正矩形进行文字定位
             cv::Rect bRect = cv::boundingRect(contours[i]);
             std::string text = "W:" + std::to_string(w) + " H:" + std::to_string(h);
@@ -114,7 +106,18 @@ int main(int argc,char** argv){
         }
 
 
-        
+        // 按灯条中心的横坐标从左到右排序，便于将相邻灯条配对。
+        std::sort(bars.begin(), bars.end(), [](const LightBar& a, const LightBar& b) {
+            return a.rect.center.x < b.rect.center.x;
+        });
+        // 每两根灯条作为一组，用上下端点组成矩形的四个顶点。
+        for (size_t i = 0; i + 1 < bars.size(); i += 2) {
+        // 用四条直线依次连接灯条端点，绘制绿色闭合矩形。
+            cv::line(result, bars[i].top, bars[i + 1].top, cv::Scalar(0, 255, 0), 2);
+            cv::line(result, bars[i + 1].top, bars[i + 1].bottom, cv::Scalar(0, 255, 0), 2);
+            cv::line(result, bars[i + 1].bottom, bars[i].bottom, cv::Scalar(0, 255, 0), 2);
+            cv::line(result, bars[i].bottom, bars[i].top, cv::Scalar(0, 255, 0), 2);
+        }
 
         
         
