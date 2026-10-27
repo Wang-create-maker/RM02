@@ -2,6 +2,7 @@
 #include<iostream>
 #include <vector>
 #include <algorithm>
+
 int main(int argc,char** argv){
     //————————————获取并播放视频————————————
     std::string videoPath = (argc > 1) ? argv[1] : "../assets/output.mp4";//获取视频路径，用于cap读取视频//argc+argv工作原理有疑惑
@@ -11,26 +12,32 @@ int main(int argc,char** argv){
         return -1;
     }
     cv::Mat frame;                       //声明矩阵Mat对象frame（帧）
+
     
     
-    /*while(cap.read(frame)){              //将cap里的视频逐帧存给frame，如果无照片可存，返回false，循环不执行
-        if(frame.empty()) break;         //检查措施，如果frame是空的，不执行
-        cv::imshow("raw",frame);         //在名为raw的窗口播放存在frame的视频（逐帧照片）
-        if(cv::waitKey(1000) == 27) break;//防止白屏，给opencv窗口喘息时间（1mm或其他可调时长），顺便检查是否按esc退出
-    }*/
-    //————————————二值化+掩码 ==> 初步突出目标————————————
+    const cv::Mat cameraMatrix = (cv::Mat_<double>(3, 3) <<
+        9.28130989e+02, 0.0, 3.77572945e+02,
+        0.0, 9.30138391e+02, 2.83892859e+02,
+        0.0, 0.0, 1.0);//3*3矩阵，保存相机内参K矩阵
+    const cv::Mat distCoeffs = (cv::Mat_<double>(1, 5) <<
+        -2.54433647e-01, 5.69431382e-01, 3.65405229e-03,
+        -1.09433818e-03, -1.33846840e+00);//1*5矩阵，保存相机畸变参数
+    constexpr float plateWidth = 130.0f;
+    constexpr float plateHeight = 50.0f;
+    constexpr float axisLength = 200.0f;//`axisLength` 是绘制坐标轴的实际长度，也为 **mm**
+    
+    // FLU: +X points out of the armor plate, +Y points left, and +Z points up.
+    const std::vector<cv::Point3f> plateCorners = {
+        cv::Point3f(0.0f, plateWidth / 2.0f, plateHeight / 2.0f),
+        cv::Point3f(0.0f, -plateWidth / 2.0f, plateHeight / 2.0f),
+        cv::Point3f(0.0f, -plateWidth / 2.0f, -plateHeight / 2.0f),
+        cv::Point3f(0.0f, plateWidth / 2.0f, -plateHeight / 2.0f)
+    };
+    
+    
+    
+    
     cv::Mat hsv, mask1, mask2, mask;
-    /*cv::cvtColor(frame, hsv, cv::COLOR_BGR2HSV);//“BGR”格式图片转换为（to/2）HSV格式图片，（目标相框，目标格式，转换方法）
-    cv::inRange(hsv,cv::Scalar(0,43,46),cv::Scalar(180,255,255),mask1);
-    cv::inRange(hsv,cv::Scalar(160,43,46),cv::Scalar(180,255,255),mask2);
-    cv::bitwise_or(mask1,mask2,mask);//将两段红色掩码拼图在一起*/
-    
-    //————————————形态学去噪 ==> 进一步突出目标(膨胀目标，腐蚀噪点)————————————
-    /*cv::Mat kernal = cv::getStructuringElement(cv::MORPH_RECT,cv::Size(3,3));
-    cv::morphologyEx(mask,mask,cv::MORPH_OPEN,kernal);*/
-    
-    
-    
     while(cap.read(frame)){ 
         if(frame.empty()) break;        //检查措施，如果frame是空的，不执行
         
@@ -117,6 +124,46 @@ int main(int argc,char** argv){
             cv::line(result, bars[i + 1].top, bars[i + 1].bottom, cv::Scalar(0, 255, 0), 2);
             cv::line(result, bars[i + 1].bottom, bars[i].bottom, cv::Scalar(0, 255, 0), 2);
             cv::line(result, bars[i].bottom, bars[i].top, cv::Scalar(0, 255, 0), 2);
+
+            const std::vector<cv::Point2f> imageCorners = {
+                bars[i].top,
+                bars[i + 1].top,
+                bars[i + 1].bottom,
+                bars[i].bottom
+            };
+            cv::Mat rvec, tvec;
+            if (cv::solvePnP(plateCorners, imageCorners, cameraMatrix, distCoeffs,
+                             rvec, tvec, false, cv::SOLVEPNP_IPPE) &&
+                tvec.at<double>(2, 0) > 0.0) {
+                const std::vector<cv::Point3f> axes = {
+                    cv::Point3f(0.0f, 0.0f, 0.0f),
+                    cv::Point3f(axisLength, 0.0f, 0.0f),
+                    cv::Point3f(0.0f, -axisLength, 0.0f),
+                    cv::Point3f(0.0f, 0.0f, axisLength)
+                };
+                std::vector<cv::Point2f> projectedAxes;
+                cv::projectPoints(axes, rvec, tvec, cameraMatrix, distCoeffs, projectedAxes);
+
+                const cv::Point origin(
+                    cvRound(projectedAxes[0].x), cvRound(projectedAxes[0].y));
+                cv::arrowedLine(result, origin, projectedAxes[1], cv::Scalar(0, 0, 255), 2);
+                cv::arrowedLine(result, origin, projectedAxes[2], cv::Scalar(0, 255, 0), 2);
+                cv::arrowedLine(result, origin, projectedAxes[3], cv::Scalar(255, 0, 0), 2);
+                cv::putText(result, "X(F)", projectedAxes[1], cv::FONT_HERSHEY_SIMPLEX,
+                            0.45, cv::Scalar(0, 0, 255), 1);
+                cv::putText(result, "Y(L)", projectedAxes[2], cv::FONT_HERSHEY_SIMPLEX,
+                            0.45, cv::Scalar(0, 255, 0), 1);
+                cv::putText(result, "Z(U)", projectedAxes[3], cv::FONT_HERSHEY_SIMPLEX,
+                            0.45, cv::Scalar(255, 0, 0), 1);
+
+                const std::string positionText =
+                    "t_cam(mm): x=" + std::to_string(tvec.at<double>(0, 0)) +
+                    " y=" + std::to_string(tvec.at<double>(1, 0)) +
+                    " z=" + std::to_string(tvec.at<double>(2, 0));
+                cv::putText(result, positionText,
+                            cv::Point(10, 25 + static_cast<int>(i / 2) * 20),
+                            cv::FONT_HERSHEY_SIMPLEX, 0.45, cv::Scalar(255, 255, 255), 1);
+            }
         }
 
         
